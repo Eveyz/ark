@@ -1,0 +1,17 @@
+[package]
+name = "ark-1"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+arrow-array = "58.3.0"
+arrow-schema = "58.3.0"
+fastembed = "5.15.0"
+futures = "0.3.32"
+lancedb = "0.30.0"
+llama-cpp-2 = { version = "0.1.146", features = ["metal"] }
+serde = { version = "1.0.228", features = ["derive"] }
+
+thiserror = "2.0.18"
+tokio = { version = "1", features = ["full"] }
+

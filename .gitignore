@@ -1,0 +1,5 @@
+/target
+*cache
+.antigravitycli
+*ark_db.lance
+.DS_Store
