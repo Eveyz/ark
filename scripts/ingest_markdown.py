@@ -9,7 +9,7 @@ from tqdm import tqdm
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_DB_PATH = os.path.join(PROJECT_ROOT, "ark_db.lance")
 DEFAULT_CACHE_DIR = os.path.join(PROJECT_ROOT, "model_cache", "fastembed")
-MD_DATA_DIR = os.path.join(PROJECT_ROOT, "data", "markdown")
+MD_DATA_DIR = os.path.join(PROJECT_ROOT, "data", "markdown_clean")
 TABLE_NAME = "survival_guide_md"
 
 def ingest_markdown():
