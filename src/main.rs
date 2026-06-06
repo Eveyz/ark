@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use arrow_array::{FixedSizeListArray, Float32Array, Int32Array, RecordBatch, StringArray};
 use arrow_schema::{DataType, Field, Schema};
-use fastembed::{EmbeddingModel, InitOptions, TextEmbedding};
+use fastembed::{EmbeddingModel, InitOptions, RerankerModel, TextEmbedding, TextRerank};
 use futures::StreamExt;
 use lancedb::query::{ExecutableQuery, QueryBase};
 use thiserror::Error;
@@ -40,10 +40,13 @@ const DB_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/ark_db.lance");
 const TABLE_NAME: &str = "survival_guide_md";
 const MODEL_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/model_cache/Qwen3-8B-Q4_K_M.gguf");
 const CACHE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/model_cache/fastembed");
+const RETRIEVE_K: usize = 20; // 粗排召回数量
+const RERANK_K: usize = 5;   // 精排保留数量
 
 struct KnowledgeAgent {
     db: lancedb::Connection,
     embedder: TextEmbedding,
+    reranker: TextRerank,
 }
 
 impl KnowledgeAgent {
@@ -54,7 +57,14 @@ impl KnowledgeAgent {
             .with_show_download_progress(true)
             .with_cache_dir(cache_dir.to_path_buf());
         let embedder = TextEmbedding::try_new(options)?;
-        let mut agent = Self { db, embedder };
+
+        // 初始化 reranker: BGE-Reranker-V2-M3 多语言（中英通吃）
+        let rerank_options = fastembed::RerankInitOptions::new(RerankerModel::BGERerankerV2M3)
+            .with_show_download_progress(true)
+            .with_cache_dir(cache_dir.to_path_buf());
+        let reranker = TextRerank::try_new(rerank_options)?;
+
+        let mut agent = Self { db, embedder, reranker };
         agent.init_database().await?;
         Ok(agent)
     }
@@ -107,25 +117,41 @@ impl KnowledgeAgent {
         let mut query_embedding = self.embedder.embed(vec![query_with_prefix], None)?;
         let query_vec = query_embedding.pop().ok_or_else(|| ArkError::Unexpected("Failed to generate embedding".to_string()))?;
         let table = self.db.open_table(TABLE_NAME).execute().await?;
-        
-        let mut results = table.query().nearest_to(query_vec)?.limit(5).execute().await?;
-        
-        let mut contexts = Vec::new();
+
+        // === 阶段 1: 粗排 — 向量检索召回 top RETRIEVE_K ===
+        let mut results = table.query().nearest_to(query_vec)?.limit(RETRIEVE_K).execute().await?;
+
+        let mut candidates: Vec<String> = Vec::new();
         if let Some(batch_res) = results.next().await {
             let batch: RecordBatch = batch_res?;
             if batch.num_rows() > 0 {
                 let text_array = batch.column_by_name("text").unwrap().as_any().downcast_ref::<StringArray>().unwrap();
                 for i in 0..batch.num_rows() {
-                    contexts.push(text_array.value(i).to_string());
+                    candidates.push(text_array.value(i).to_string());
                 }
             }
         }
-        
-        if contexts.is_empty() {
-            Err(ArkError::NotFound("No relevant data found in DB".to_string()))
-        } else {
-            Ok(contexts.join("\n...\n"))
+
+        if candidates.is_empty() {
+            return Err(ArkError::NotFound("No relevant data found in DB".to_string()));
         }
+
+        // === 阶段 2: 精排 — Cross-encoder Reranker 重排取 top RERANK_K ===
+        let rerank_results = self.reranker.rerank(
+            query,           // 用原始 query（不加 BGE 前缀）做交叉编码
+            &candidates,
+            true,            // return_documents: 在结果中附带文档文本
+            None,            // batch_size: 默认
+        )?;
+
+        // 按 score 降序取 top RERANK_K 条，只保留真正喂给 LLM 的结果
+        let contexts: Vec<String> = rerank_results
+            .into_iter()
+            .take(RERANK_K)
+            .filter_map(|r| r.document)
+            .collect();
+
+        Ok(contexts.join("\n...\n"))
     }
 }
 
