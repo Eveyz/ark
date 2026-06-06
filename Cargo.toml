@@ -9,9 +9,15 @@ arrow-schema = "58.3.0"
 fastembed = "5.15.0"
 futures = "0.3.32"
 lancedb = "0.30.0"
-llama-cpp-2 = { version = "0.1.146", features = ["metal"] }
 serde = { version = "1.0.228", features = ["derive"] }
-
 thiserror = "2.0.18"
 tokio = { version = "1", features = ["full"] }
+
+# === 按平台自动选择 GPU 后端 ===
+# macOS → Metal; 其他 → CUDA
+[target.'cfg(target_os = "macos")'.dependencies]
+llama-cpp-2 = { version = "0.1.146", features = ["metal"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+llama-cpp-2 = { version = "0.1.146", features = ["cuda"] }
 

@@ -50,3 +50,5 @@ python scripts/ingest_markdown.py
 ```bash
 cargo run
 ```
+
+pip install pymupdf langchain-text-splitters fastembed lancedb pyarrow tqdm

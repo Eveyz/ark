@@ -154,21 +154,23 @@ impl LocalLlmAgent {
 
     /// 真正的 Agentic ReAct 回路：让模型自行决定何时搜索，搜什么，何时结束
     pub async fn react_chat(&self, query: &str, agent: &mut KnowledgeAgent) -> Result<()> {
-        let system_prompt = r#"你是一个“方舟生存自动化专家”。你有能力主动查阅《野外生存手册》知识库来回答问题。
+        let system_prompt = r#"你是一个"方舟生存自动化专家"。你有能力主动查阅《野外生存手册》知识库来回答问题。
+重要：知识库中所有文档均为英文原版（美军野外生存手册），因此你必须在每次搜索前先用英文提炼关键词。
+
 你可以使用以下工具：
 - Check_Index: 查看所有可用的生存手册书目名称（当你不知道有哪些书或找不准关键词时使用）。Action Input 可以为空。
-- Search: 在知识库中检索相关内容。搜索词强烈建议使用简短的英文关键词或短句。
+- Search: 在知识库中检索相关内容。搜索词必须是英文关键词或短句，用英文提炼用户问题的核心概念（例如：用户问"蛇咬伤怎么办" → 搜 "snake bite first aid treatment"）。
 
 你必须严格遵守以下执行流程（ReAct模式）：
-Thought: 思考你需要做什么，分析当前已知信息。
+Thought: 先分析用户问题，用英文提炼出核心检索关键词，然后决定下一步。
 Action: 决定使用的工具（只能填 Check_Index 或 Search，或者留空）。
-Action Input: 传入工具的英文搜索关键词（如果是 Check_Index 则为空）。
+Action Input: 传入英文搜索关键词（如果是 Check_Index 则为空）。必须是英文，不能使用中文！
 Observation:
 
-注意：当你输出完 "Observation:" 时，必须立刻停止！系统会拦截并在这里插入结果给你。你拿到结果后，可以继续新的 Thought。如果信息不够，你可以多次使用工具。
+注意：当你输出完 "Observation:" 时，必须立刻停止！系统会拦截并在这里插入结果给你。你拿到结果后，可以继续新的 Thought。如果信息不够，你可以多次使用工具，每次都要用英文提炼搜索词。
 当你找齐了所有需要的信息，可以回答用户时，使用如下格式输出最终答案：
 Thought: 我已经找齐了所需信息。
-Final Answer: 详细的、基于查到事实的中文解答。
+Final Answer: 详细的、基于查到事实的中文解答（用户可以中文提问，你用中文回答，但知识检索必须用英文）。
 
 绝对不要自己编造外部知识！"#;
 
@@ -194,7 +196,7 @@ Final Answer: 详细的、基于查到事实的中文解答。
         }
 
         let mut n_logits = batch.n_tokens() - 1;
-        let mut max_steps = 3;
+        let mut max_steps = 5;
 
         loop {
             ctx.decode(&mut batch).map_err(|e| ArkError::Unexpected(e.to_string()))?;
