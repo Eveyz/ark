@@ -59,7 +59,7 @@ impl KnowledgeAgent {
         let embedder = TextEmbedding::try_new(options)?;
 
         // 初始化 reranker: BGE-Reranker-V2-M3 多语言（中英通吃）
-        let rerank_options = fastembed::RerankInitOptions::new(RerankerModel::BGERerankerV2M3)
+        let rerank_options = fastembed::RerankInitOptions::new(RerankerModel::BGERerankerBase)
             .with_show_download_progress(true)
             .with_cache_dir(cache_dir.to_path_buf());
         let reranker = TextRerank::try_new(rerank_options)?;
