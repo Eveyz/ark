@@ -137,9 +137,10 @@ impl KnowledgeAgent {
         }
 
         // === 阶段 2: 精排 — Cross-encoder Reranker 重排取 top RERANK_K ===
+        let candidate_slices: Vec<&str> = candidates.iter().map(|s| s.as_str()).collect();
         let rerank_results = self.reranker.rerank(
             query,           // 用原始 query（不加 BGE 前缀）做交叉编码
-            &candidates,
+            &candidate_slices,
             true,            // return_documents: 在结果中附带文档文本
             None,            // batch_size: 默认
         )?;
